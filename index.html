@@ -2,8 +2,11 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+
   <meta name="viewport"
-        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+        content="width=device-width,
+                 initial-scale=1.0,
+                 viewport-fit=cover">
 
   <title>Black Camera</title>
 
@@ -15,29 +18,39 @@
       background: black;
       color: white;
       font-family: sans-serif;
-    }
-
-    #startButton {
-      position: fixed;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-
-      font-size: 20px;
-      padding: 16px 28px;
-
-      border: none;
-      border-radius: 12px;
-
-      background: white;
-      color: black;
+      overflow: hidden;
     }
 
     #camera {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: none;
+    }
 
+    .controls {
+      position: fixed;
+      bottom: 40px;
+      left: 0;
+      width: 100%;
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      z-index: 10;
+    }
+
+    button {
+      font-size: 18px;
+      padding: 14px 20px;
+      border: none;
+      border-radius: 12px;
+    }
+
+    #recordButton {
+      display: none;
+    }
+
+    #stopButton {
       display: none;
     }
   </style>
@@ -45,39 +58,147 @@
 
 <body>
 
-  <video id="camera" autoplay playsinline muted></video>
+  <video
+    id="camera"
+    autoplay
+    playsinline
+    muted>
+  </video>
 
-  <button id="startButton">
-    カメラを起動
-  </button>
+  <div class="controls">
+
+    <button id="startButton">
+      カメラを起動
+    </button>
+
+    <button id="recordButton">
+      録画開始
+    </button>
+
+    <button id="stopButton">
+      録画停止
+    </button>
+
+  </div>
 
   <script>
-    const button = document.getElementById("startButton");
-    const video = document.getElementById("camera");
+    const video =
+      document.getElementById("camera");
 
-    button.addEventListener("click", async () => {
-      try {
-        const stream =
-          await navigator.mediaDevices.getUserMedia({
-            video: {
-              facingMode: {
-                ideal: "environment"
-              }
-            },
-            audio: false
-          });
+    const startButton =
+      document.getElementById("startButton");
 
-        video.srcObject = stream;
-        video.style.display = "block";
-        button.style.display = "none";
+    const recordButton =
+      document.getElementById("recordButton");
 
-      } catch (error) {
-        alert(
-          "カメラを起動できませんでした。\n" +
-          error.message
-        );
+    const stopButton =
+      document.getElementById("stopButton");
+
+    let stream;
+    let recorder;
+    let chunks = [];
+
+    startButton.addEventListener(
+      "click",
+      async () => {
+
+        try {
+
+          stream =
+            await navigator.mediaDevices
+              .getUserMedia({
+                video: {
+                  facingMode: {
+                    ideal: "environment"
+                  }
+                },
+                audio: true
+              });
+
+          video.srcObject = stream;
+          video.style.display = "block";
+
+          startButton.style.display = "none";
+          recordButton.style.display = "block";
+
+        } catch (error) {
+
+          alert(
+            "カメラを起動できませんでした。\n" +
+            error.message
+          );
+        }
       }
-    });
+    );
+
+    recordButton.addEventListener(
+      "click",
+      () => {
+
+        chunks = [];
+
+        recorder =
+          new MediaRecorder(stream);
+
+        recorder.ondataavailable =
+          event => {
+
+            if (event.data.size > 0) {
+              chunks.push(event.data);
+            }
+          };
+
+        recorder.onstop =
+          () => {
+
+            const blob =
+              new Blob(
+                chunks,
+                {
+                  type: recorder.mimeType
+                }
+              );
+
+            const url =
+              URL.createObjectURL(blob);
+
+            const a =
+              document.createElement("a");
+
+            a.href = url;
+            a.download = "video.webm";
+
+            a.click();
+
+            setTimeout(
+              () => URL.revokeObjectURL(url),
+              1000
+            );
+          };
+
+        recorder.start();
+
+        recordButton.style.display = "none";
+        stopButton.style.display = "block";
+      }
+    );
+
+    stopButton.addEventListener(
+      "click",
+      () => {
+
+        if (
+          recorder &&
+          recorder.state !== "inactive"
+        ) {
+          recorder.stop();
+        }
+
+        stopButton.style.display = "none";
+        recordButton.style.display = "block";
+      }
+    );
+
   </script>
 
 </body>
