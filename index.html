@@ -5,7 +5,8 @@
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover,
+             user-scalable=no"
   >
 
   <title>Black Camera</title>
@@ -16,43 +17,53 @@
       margin: 0;
       width: 100%;
       height: 100%;
-      background: black;
-      color: white;
-      font-family: sans-serif;
+      background: #000;
       overflow: hidden;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
     }
 
+    /*
+      カメラ映像は録画に使うが、
+      画面には表示しない
+    */
     #camera {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: none;
-    }
-
-    .controls {
       position: fixed;
-      bottom: 40px;
-      left: 0;
-      width: 100%;
-      display: flex;
-      justify-content: center;
-      gap: 15px;
-      z-index: 10;
+      width: 1px;
+      height: 1px;
+      opacity: 0;
+      pointer-events: none;
     }
 
-    button {
+    #startScreen {
+      position: fixed;
+      inset: 0;
+      background: #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    #startButton {
       font-size: 18px;
-      padding: 14px 20px;
+      padding: 15px 24px;
       border: none;
       border-radius: 12px;
+      background: white;
+      color: black;
     }
 
-    #recordButton {
+    /*
+      カメラ起動後の黒画面。
+      画面全体が操作領域になる。
+    */
+    #blackScreen {
+      position: fixed;
+      inset: 0;
+      background: #000;
       display: none;
-    }
-
-    #stopButton {
-      display: none;
+      z-index: 10;
     }
   </style>
 </head>
@@ -66,43 +77,40 @@
     muted>
   </video>
 
-  <div class="controls">
-
+  <div id="startScreen">
     <button id="startButton">
       カメラを起動
     </button>
-
-    <button id="recordButton">
-      録画開始
-    </button>
-
-    <button id="stopButton">
-      録画停止
-    </button>
-
   </div>
+
+  <div id="blackScreen"></div>
 
   <script>
 
     const video =
       document.getElementById("camera");
 
+    const startScreen =
+      document.getElementById("startScreen");
+
     const startButton =
       document.getElementById("startButton");
 
-    const recordButton =
-      document.getElementById("recordButton");
+    const blackScreen =
+      document.getElementById("blackScreen");
 
-    const stopButton =
-      document.getElementById("stopButton");
 
     let stream = null;
     let recorder = null;
     let chunks = [];
 
+    let isRecording = false;
+
+    let lastTapTime = 0;
+
 
     // -------------------------
-    // カメラを起動
+    // カメラ・マイク準備
     // -------------------------
 
     startButton.addEventListener(
@@ -113,30 +121,37 @@
 
           stream =
             await navigator.mediaDevices.getUserMedia({
+
               video: {
                 facingMode: {
                   ideal: "environment"
                 }
               },
 
-              // 動画と一緒に音声も録音
               audio: true
             });
 
+
           video.srcObject = stream;
 
-          video.style.display = "block";
+          await video.play();
 
-          startButton.style.display = "none";
-          recordButton.style.display = "block";
+
+          // カメラ映像は表示せず黒画面へ
+          startScreen.style.display = "none";
+
+          blackScreen.style.display = "block";
+
 
         } catch (error) {
 
           alert(
-            "カメラを起動できませんでした。\n" +
+            "カメラまたはマイクを起動できませんでした。\n" +
             error.message
           );
+
         }
+
       }
     );
 
@@ -145,130 +160,227 @@
     // 録画開始
     // -------------------------
 
-    recordButton.addEventListener(
-      "click",
-      () => {
+    function startRecording() {
 
-        if (!stream) {
-          return;
-        }
-
-        chunks = [];
-
-        try {
-
-          recorder =
-            new MediaRecorder(stream);
-
-        } catch (error) {
-
-          alert(
-            "録画を開始できませんでした。\n" +
-            error.message
-          );
-
-          return;
-        }
-
-
-        // 録画データを受け取る
-        recorder.ondataavailable =
-          event => {
-
-            if (event.data.size > 0) {
-              chunks.push(event.data);
-            }
-          };
-
-
-        // 録画終了後
-        recorder.onstop =
-          () => {
-
-            const blob =
-              new Blob(
-                chunks,
-                {
-                  type: recorder.mimeType
-                }
-              );
-
-            const url =
-              URL.createObjectURL(blob);
-
-            const link =
-              document.createElement("a");
-
-            link.href = url;
-
-            // 現段階ではテスト用
-            link.download = "video";
-
-            document.body.appendChild(link);
-
-            link.click();
-
-            link.remove();
-
-            setTimeout(
-              () => {
-                URL.revokeObjectURL(url);
-              },
-              3000
-            );
-          };
-
-
-        recorder.start();
-
-        recordButton.style.display = "none";
-        stopButton.style.display = "block";
+      if (!stream || isRecording) {
+        return;
       }
-    );
+
+
+      chunks = [];
+
+
+      try {
+
+        recorder =
+          new MediaRecorder(stream);
+
+      } catch (error) {
+
+        alert(
+          "録画を開始できませんでした。\n" +
+          error.message
+        );
+
+        return;
+      }
+
+
+      recorder.ondataavailable =
+        event => {
+
+          if (event.data.size > 0) {
+
+            chunks.push(event.data);
+
+          }
+
+        };
+
+
+      recorder.onstop =
+        () => {
+
+          saveVideo();
+
+        };
+
+
+      recorder.start();
+
+      isRecording = true;
+
+    }
 
 
     // -------------------------
     // 録画停止
     // -------------------------
 
-    stopButton.addEventListener(
-      "click",
-      () => {
+    function stopRecording() {
 
-        // 録画を停止
+      if (
+        !recorder ||
+        !isRecording ||
+        recorder.state === "inactive"
+      ) {
+
+        return;
+
+      }
+
+
+      isRecording = false;
+
+      recorder.stop();
+
+
+      // カメラ・マイクも停止
+      if (stream) {
+
+        stream
+          .getTracks()
+          .forEach(track => {
+
+            track.stop();
+
+          });
+
+        stream = null;
+
+      }
+
+
+      video.srcObject = null;
+
+    }
+
+
+    // -------------------------
+    // 動画保存
+    // -------------------------
+
+    function saveVideo() {
+
+      if (chunks.length === 0) {
+        return;
+      }
+
+
+      const mimeType =
+        recorder.mimeType ||
+        chunks[0].type ||
+        "video/mp4";
+
+
+      const blob =
+        new Blob(
+          chunks,
+          {
+            type: mimeType
+          }
+        );
+
+
+      const url =
+        URL.createObjectURL(blob);
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href = url;
+
+      /*
+        拡張子を決め打ちせず、
+        iPhone/Safari側の形式に任せる
+      */
+      link.download = "BlackCamera-video";
+
+
+      document.body.appendChild(link);
+
+      link.click();
+
+      link.remove();
+
+
+      setTimeout(
+        () => {
+
+          URL.revokeObjectURL(url);
+
+        },
+        5000
+      );
+
+
+      /*
+        録画停止後はカメラも終了しているので、
+        最初の画面へ戻す
+      */
+
+      blackScreen.style.display = "none";
+
+      startScreen.style.display = "flex";
+
+    }
+
+
+    // -------------------------
+    // ダブルタップ判定
+    // -------------------------
+
+    blackScreen.addEventListener(
+      "touchend",
+      event => {
+
+        event.preventDefault();
+
+
+        const now =
+          Date.now();
+
+
+        const interval =
+          now - lastTapTime;
+
+
+        /*
+          350ms以内に2回タップしたら
+          ダブルタップと判定
+        */
+
         if (
-          recorder &&
-          recorder.state !== "inactive"
+          interval > 0 &&
+          interval < 350
         ) {
 
-          recorder.stop();
+          lastTapTime = 0;
+
+
+          if (isRecording) {
+
+            stopRecording();
+
+          } else {
+
+            startRecording();
+
+          }
+
+
+          return;
+
         }
 
 
-        // カメラ・マイクを完全停止
-        if (stream) {
+        lastTapTime = now;
 
-          stream
-            .getTracks()
-            .forEach(track => {
-
-              track.stop();
-
-            });
-
-          stream = null;
-        }
-
-
-        // カメラ表示も終了
-        video.srcObject = null;
-        video.style.display = "none";
-
-
-        // 最初の画面に戻す
-        stopButton.style.display = "none";
-        recordButton.style.display = "none";
-        startButton.style.display = "block";
+      },
+      {
+        passive: false
       }
     );
 
