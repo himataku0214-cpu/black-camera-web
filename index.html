@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+  <title>Black Camera</title>
+
+  <style>
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: black;
+      color: white;
+      font-family: sans-serif;
+    }
+
+    #startButton {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+
+      font-size: 20px;
+      padding: 16px 28px;
+
+      border: none;
+      border-radius: 12px;
+
+      background: white;
+      color: black;
+    }
+
+    #camera {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <video id="camera" autoplay playsinline muted></video>
+
+  <button id="startButton">
+    カメラを起動
+  </button>
+
+  <script>
+    const button = document.getElementById("startButton");
+    const video = document.getElementById("camera");
+
+    button.addEventListener("click", async () => {
+      try {
+        const stream =
+          await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: {
+                ideal: "environment"
+              }
+            },
+            audio: false
+          });
+
+        video.srcObject = stream;
+        video.style.display = "block";
+        button.style.display = "none";
+
+      } catch (error) {
+        alert(
+          "カメラを起動できませんでした。\n" +
+          error.message
+        );
+      }
+    });
+  </script>
+
+</body>
+</html>
