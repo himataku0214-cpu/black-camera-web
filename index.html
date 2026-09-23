@@ -259,7 +259,12 @@
           await storeVideo(blob);
           status.textContent = "動画を保存しました";
         } catch (error) {
-          status.textContent = "保存に失敗しました";
+         
+status.textContent =
+  "保存エラー：" +
+  (error.name || "不明") +
+  " / " +
+  (error.message || "詳細なし");
           alert(
             "動画を保存できませんでした。空き容量などを確認してください。\n" +
             error.message
