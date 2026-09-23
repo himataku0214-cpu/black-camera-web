@@ -5,65 +5,118 @@
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover,
+    content="width=device-width,
+             initial-scale=1.0,
+             viewport-fit=cover,
              user-scalable=no"
   >
 
   <title>Black Camera</title>
 
+  <!-- ホーム画面からアプリ風に起動 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <!-- iPhone上端の背景を黒系にする -->
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black"
+  >
+
+  <!-- ブラウザ側のテーマ色 -->
+  <meta name="theme-color" content="#000000">
+
   <style>
     html,
     body {
       margin: 0;
+      padding: 0;
+
       width: 100%;
       height: 100%;
+      min-height: 100dvh;
+
       background: #000;
       overflow: hidden;
+
       touch-action: manipulation;
+
       -webkit-user-select: none;
       user-select: none;
+
+      -webkit-touch-callout: none;
+    }
+
+    body {
+      position: fixed;
+      inset: 0;
+
+      /* iPhoneのノッチ周辺まで黒背景 */
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+
+      box-sizing: border-box;
     }
 
     /*
-      カメラ映像は録画に使うが、
-      画面には表示しない
+      カメラ映像は録画に使うが
+      ユーザー画面には表示しない
     */
     #camera {
       position: fixed;
+
       width: 1px;
       height: 1px;
+
       opacity: 0;
+
       pointer-events: none;
     }
 
     #startScreen {
       position: fixed;
       inset: 0;
+
       background: #000;
+
       display: flex;
+
       align-items: center;
       justify-content: center;
     }
 
     #startButton {
       font-size: 18px;
+
       padding: 15px 24px;
+
       border: none;
       border-radius: 12px;
-      background: white;
-      color: black;
+
+      background: #fff;
+      color: #000;
     }
 
     /*
-      カメラ起動後の黒画面。
-      画面全体が操作領域になる。
+      カメラ準備後の黒画面
     */
     #blackScreen {
       position: fixed;
-      inset: 0;
+
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+
+      width: 100vw;
+      height: 100dvh;
+
       background: #000;
+
       display: none;
-      z-index: 10;
+
+      z-index: 9999;
     }
   </style>
 </head>
@@ -78,12 +131,15 @@
   </video>
 
   <div id="startScreen">
+
     <button id="startButton">
       カメラを起動
     </button>
+
   </div>
 
   <div id="blackScreen"></div>
+
 
   <script>
 
@@ -101,7 +157,9 @@
 
 
     let stream = null;
+
     let recorder = null;
+
     let chunks = [];
 
     let isRecording = false;
@@ -109,9 +167,9 @@
     let lastTapTime = 0;
 
 
-    // -------------------------
+    // =========================
     // カメラ・マイク準備
-    // -------------------------
+    // =========================
 
     startButton.addEventListener(
       "click",
@@ -120,16 +178,20 @@
         try {
 
           stream =
-            await navigator.mediaDevices.getUserMedia({
+            await navigator.mediaDevices
+              .getUserMedia({
 
-              video: {
-                facingMode: {
-                  ideal: "environment"
-                }
-              },
+                video: {
 
-              audio: true
-            });
+                  facingMode: {
+                    ideal: "environment"
+                  }
+
+                },
+
+                audio: true
+
+              });
 
 
           video.srcObject = stream;
@@ -137,10 +199,11 @@
           await video.play();
 
 
-          // カメラ映像は表示せず黒画面へ
-          startScreen.style.display = "none";
+          startScreen.style.display =
+            "none";
 
-          blackScreen.style.display = "block";
+          blackScreen.style.display =
+            "block";
 
 
         } catch (error) {
@@ -156,14 +219,19 @@
     );
 
 
-    // -------------------------
+    // =========================
     // 録画開始
-    // -------------------------
+    // =========================
 
     function startRecording() {
 
-      if (!stream || isRecording) {
+      if (
+        !stream ||
+        isRecording
+      ) {
+
         return;
+
       }
 
 
@@ -183,15 +251,20 @@
         );
 
         return;
+
       }
 
 
       recorder.ondataavailable =
         event => {
 
-          if (event.data.size > 0) {
+          if (
+            event.data.size > 0
+          ) {
 
-            chunks.push(event.data);
+            chunks.push(
+              event.data
+            );
 
           }
 
@@ -213,9 +286,9 @@
     }
 
 
-    // -------------------------
+    // =========================
     // 録画停止
-    // -------------------------
+    // =========================
 
     function stopRecording() {
 
@@ -235,16 +308,18 @@
       recorder.stop();
 
 
-      // カメラ・マイクも停止
+      // カメラとマイクを完全停止
       if (stream) {
 
         stream
           .getTracks()
-          .forEach(track => {
+          .forEach(
+            track => {
 
-            track.stop();
+              track.stop();
 
-          });
+            }
+          );
 
         stream = null;
 
@@ -256,14 +331,18 @@
     }
 
 
-    // -------------------------
+    // =========================
     // 動画保存
-    // -------------------------
+    // =========================
 
     function saveVideo() {
 
-      if (chunks.length === 0) {
+      if (
+        chunks.length === 0
+      ) {
+
         return;
+
       }
 
 
@@ -292,14 +371,13 @@
 
       link.href = url;
 
-      /*
-        拡張子を決め打ちせず、
-        iPhone/Safari側の形式に任せる
-      */
-      link.download = "BlackCamera-video";
+      link.download =
+        "BlackCamera-video";
 
 
-      document.body.appendChild(link);
+      document.body.appendChild(
+        link
+      );
 
       link.click();
 
@@ -309,28 +387,27 @@
       setTimeout(
         () => {
 
-          URL.revokeObjectURL(url);
+          URL.revokeObjectURL(
+            url
+          );
 
         },
         5000
       );
 
 
-      /*
-        録画停止後はカメラも終了しているので、
-        最初の画面へ戻す
-      */
+      blackScreen.style.display =
+        "none";
 
-      blackScreen.style.display = "none";
-
-      startScreen.style.display = "flex";
+      startScreen.style.display =
+        "flex";
 
     }
 
 
-    // -------------------------
-    // ダブルタップ判定
-    // -------------------------
+    // =========================
+    // ダブルタップ
+    // =========================
 
     blackScreen.addEventListener(
       "touchend",
@@ -346,11 +423,6 @@
         const interval =
           now - lastTapTime;
 
-
-        /*
-          350ms以内に2回タップしたら
-          ダブルタップと判定
-        */
 
         if (
           interval > 0 &&
