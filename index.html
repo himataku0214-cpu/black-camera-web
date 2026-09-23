@@ -3,407 +3,280 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no"
-  >
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="theme-color" content="#000000">
-  <title>Black Camera</title>
-
+  <title>Black Camera 保存診断</title>
   <style>
-    * {
-      box-sizing: border-box;
-    }
-
-    html, body {
+    body {
       margin: 0;
-      width: 100%;
-      min-height: 100%;
-      background: #000;
-      color: #fff;
+      padding: 55px 20px 30px;
+      background: #111;
+      color: white;
       font-family: -apple-system, sans-serif;
     }
 
-    #camera {
-      position: fixed;
-      width: 1px;
-      height: 1px;
-      opacity: 0;
-      pointer-events: none;
-    }
-
-    #startScreen {
-      position: fixed;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 24px;
-      background: #000;
-    }
+    h2 { font-size: 21px; }
 
     button {
-      padding: 15px 24px;
-      border: 0;
-      border-radius: 12px;
-      font-size: 17px;
-      cursor: pointer;
-    }
-
-    #startButton {
-      background: #fff;
-      color: #000;
-    }
-
-    #libraryButton {
-      background: #333;
-      color: #fff;
-    }
-
-    #blackScreen {
-      position: fixed;
-      inset: 0;
-      width: 100vw;
-      height: 100dvh;
-      background: #000;
-      display: none;
-      touch-action: manipulation;
-      z-index: 10;
-    }
-
-    #libraryScreen {
-      display: none;
-      position: fixed;
-      inset: 0;
-      overflow-y: auto;
-      padding: 65px 20px 30px;
-      background: #111;
-      z-index: 20;
-    }
-
-    .videoItem {
+      display: block;
+      width: 100%;
+      padding: 16px;
       margin: 15px 0;
-      padding: 15px;
-      border-radius: 12px;
-      background: #252525;
+      border: 0;
+      border-radius: 10px;
+      font-size: 17px;
     }
 
-    .videoItem button {
-      margin: 10px 8px 0 0;
+    button:disabled { opacity: .4; }
+
+    #log {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      padding: 15px;
+      background: #292929;
+      border-radius: 10px;
+      line-height: 1.7;
       font-size: 14px;
     }
 
-    .videoItem video {
+    #camera {
+      width: 100%;
+      max-height: 240px;
+      background: black;
+    }
+
+    #savedVideos video {
       width: 100%;
       margin-top: 12px;
     }
-
-    #status {
-      min-height: 20px;
-      font-size: 13px;
-      color: #aaa;
-      text-align: center;
-    }
   </style>
 </head>
-
 <body>
+
+  <h2>録画・保存テスト</h2>
 
   <video id="camera" autoplay playsinline muted></video>
 
-  <div id="startScreen">
-    <button id="startButton">カメラを起動</button>
-    <button id="libraryButton">保存した動画を見る</button>
-    <div id="status"></div>
-  </div>
+  <button id="prepare">① カメラを起動</button>
+  <button id="record" disabled>② 録画開始</button>
+  <button id="stop" disabled>③ 録画停止・自動保存</button>
+  <button id="check">④ 保存した動画を確認</button>
 
-  <div id="blackScreen"></div>
+  <h3>診断結果</h3>
+  <div id="log">テスト開始前</div>
 
-  <div id="libraryScreen">
-    <button id="backButton">戻る</button>
-    <h2>保存した動画</h2>
-    <div id="videoList"></div>
-  </div>
+  <div id="savedVideos"></div>
 
-  <script>
-    const video = document.getElementById("camera");
-    const startScreen = document.getElementById("startScreen");
-    const startButton = document.getElementById("startButton");
-    const blackScreen = document.getElementById("blackScreen");
-    const libraryScreen = document.getElementById("libraryScreen");
-    const libraryButton = document.getElementById("libraryButton");
-    const backButton = document.getElementById("backButton");
-    const videoList = document.getElementById("videoList");
-    const status = document.getElementById("status");
+<script>
+  const camera = document.getElementById("camera");
+  const prepare = document.getElementById("prepare");
+  const record = document.getElementById("record");
+  const stop = document.getElementById("stop");
+  const check = document.getElementById("check");
+  const logBox = document.getElementById("log");
+  const savedVideos = document.getElementById("savedVideos");
 
-    let stream = null;
-    let recorder = null;
-    let chunks = [];
-    let isRecording = false;
-    let lastTapTime = 0;
-    let db = null;
-    let libraryUrls = [];
+  let stream = null;
+  let recorder = null;
+  let chunks = [];
+  let database = null;
+  let previewUrls = [];
 
-    // 動画保存用データベース
-    function openDatabase() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open("BlackCameraDB", 1);
+  function log(message) {
+    const time = new Date().toLocaleTimeString("ja-JP");
+    logBox.textContent += "\n" + time + " " + message;
+  }
 
-        request.onupgradeneeded = () => {
-          const database = request.result;
+  function errorText(error) {
+    return (error?.name || "不明") +
+      " : " + (error?.message || String(error));
+  }
 
-          if (!database.objectStoreNames.contains("videos")) {
-            database.createObjectStore("videos", {
-              keyPath: "id",
-              autoIncrement: true
-            });
-          }
-        };
+  // データベースを開く
+  function openDatabase() {
+    return new Promise((resolve, reject) => {
+      const request = indexedDB.open("BlackCameraDB", 1);
 
-        request.onsuccess = () => {
-          db = request.result;
-          resolve(db);
-        };
+      request.onupgradeneeded = () => {
+        const db = request.result;
 
-        request.onerror = () => reject(request.error);
-      });
-    }
+        if (!db.objectStoreNames.contains("videos")) {
+          db.createObjectStore("videos", {
+            keyPath: "id",
+            autoIncrement: true
+          });
+        }
+      };
 
-    const databaseReady = openDatabase();
+      request.onsuccess = () => {
+        database = request.result;
+        resolve(database);
+      };
 
-    // 動画をアプリ内に保存
-    async function storeVideo(blob) {
-      await databaseReady;
-
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction("videos", "readwrite");
-        const store = transaction.objectStore("videos");
-
-        store.add({
-          createdAt: new Date().toISOString(),
-          blob: blob
-        });
-
-        transaction.oncomplete = resolve;
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error);
-      });
-    }
-
-    // カメラ起動
-    startButton.addEventListener("click", async () => {
-      try {
-        await databaseReady;
-
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            facingMode: { ideal: "environment" }
-          },
-          audio: true
-        });
-
-        video.srcObject = stream;
-        await video.play();
-
-        status.textContent = "";
-        startScreen.style.display = "none";
-        blackScreen.style.display = "block";
-
-      } catch (error) {
-        alert("起動できませんでした。\n" + error.message);
-      }
+      request.onerror = () => reject(request.error);
+      request.onblocked = () =>
+        reject(new Error("データベースが使用中です"));
     });
+  }
 
-    // 録画開始
-    function startRecording() {
-      if (!stream || isRecording) return;
+  const databaseReady = openDatabase();
 
+  databaseReady.then(
+    () => log("データベース：接続成功"),
+    error => log("データベース：接続失敗 " + errorText(error))
+  );
+
+  // カメラ起動
+  prepare.onclick = async () => {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: "environment" } },
+        audio: true
+      });
+
+      camera.srcObject = stream;
+      await camera.play();
+
+      log("カメラ・マイク：起動成功");
+      prepare.disabled = true;
+      record.disabled = false;
+    } catch (error) {
+      log("カメラ起動エラー：" + errorText(error));
+    }
+  };
+
+  // 録画開始
+  record.onclick = () => {
+    try {
       chunks = [];
+      recorder = new MediaRecorder(stream);
 
-      try {
-        recorder = new MediaRecorder(stream);
-      } catch (error) {
-        alert("録画を開始できませんでした。\n" + error.message);
-        return;
-      }
+      log("録画形式：" + (recorder.mimeType || "自動選択"));
 
       recorder.ondataavailable = event => {
+        log("受信データ：" + event.data.size + "バイト");
+
         if (event.data.size > 0) {
           chunks.push(event.data);
         }
       };
 
-      recorder.onstop = async () => {
-        blackScreen.style.display = "none";
-        startScreen.style.display = "flex";
-        status.textContent = "動画を保存しています…";
+      recorder.onerror = event => {
+        log("録画エラー：" + errorText(event.error));
+      };
 
-        if (chunks.length === 0) {
-          status.textContent = "動画データがありません。";
+      recorder.onstop = async () => {
+        log("録画停止イベント：受信");
+
+        const type =
+          recorder.mimeType ||
+          chunks[0]?.type ||
+          "video/mp4";
+
+        const blob = new Blob(chunks, { type });
+
+        log("動画サイズ：" + blob.size + "バイト");
+
+        if (blob.size === 0) {
+          log("診断：動画データが空です");
           return;
         }
 
-        const mimeType =
-          recorder.mimeType ||
-          chunks[0].type ||
-          "video/mp4";
-
-        const blob = new Blob(chunks, {
-          type: mimeType
-        });
-
         try {
-          await storeVideo(blob);
-          status.textContent = "動画を保存しました";
+          await databaseReady;
+
+          await new Promise((resolve, reject) => {
+            const tx = database.transaction("videos", "readwrite");
+
+            tx.objectStore("videos").add({
+              createdAt: new Date().toISOString(),
+              blob
+            });
+
+            tx.oncomplete = () => resolve();
+            tx.onerror = () =>
+              reject(tx.error || new Error("書き込み失敗"));
+            tx.onabort = () =>
+              reject(tx.error || new Error("保存中断"));
+          });
+
+          log("保存結果：成功");
+
         } catch (error) {
-         
-status.textContent =
-  "保存エラー：" +
-  (error.name || "不明") +
-  " / " +
-  (error.message || "詳細なし");
-          alert(
-            "動画を保存できませんでした。空き容量などを確認してください。\n" +
-            error.message
-          );
+          log("保存結果：失敗");
+          log("エラー詳細：" + errorText(error));
         }
+
+        if (stream) {
+          stream.getTracks().forEach(track => track.stop());
+          stream = null;
+        }
+
+        camera.srcObject = null;
+        prepare.disabled = false;
       };
 
       recorder.start();
-      isRecording = true;
+      log("録画開始：成功");
+
+      record.disabled = true;
+      stop.disabled = false;
+
+    } catch (error) {
+      log("録画開始エラー：" + errorText(error));
     }
+  };
 
-    // 録画停止
-    function stopRecording() {
-      if (
-        !recorder ||
-        !isRecording ||
-        recorder.state === "inactive"
-      ) {
-        return;
-      }
+  // 録画停止
+  stop.onclick = () => {
+    if (!recorder || recorder.state !== "recording") return;
 
-      isRecording = false;
-      recorder.stop();
+    log("録画停止：実行");
+    recorder.stop();
 
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
-        stream = null;
-      }
+    stop.disabled = true;
+  };
 
-      video.srcObject = null;
-    }
-
-    // ダブルタップ
-    blackScreen.addEventListener("touchend", event => {
-      event.preventDefault();
-
-      const now = Date.now();
-      const interval = now - lastTapTime;
-
-      if (interval > 0 && interval < 350) {
-        lastTapTime = 0;
-
-        if (isRecording) {
-          stopRecording();
-        } else {
-          startRecording();
-        }
-
-        return;
-      }
-
-      lastTapTime = now;
-    }, { passive: false });
-
-    // 保存した動画を取得
-    async function getSavedVideos() {
+  // 保存済み動画を確認
+  check.onclick = async () => {
+    try {
       await databaseReady;
 
-      return new Promise((resolve, reject) => {
-        const transaction = db.transaction("videos", "readonly");
-        const request = transaction.objectStore("videos").getAll();
+      const videos = await new Promise((resolve, reject) => {
+        const tx = database.transaction("videos", "readonly");
+        const request = tx.objectStore("videos").getAll();
 
         request.onsuccess = () => resolve(request.result);
         request.onerror = () => reject(request.error);
       });
+
+      log("保存済み動画：" + videos.length + "件");
+
+      previewUrls.forEach(url => URL.revokeObjectURL(url));
+      previewUrls = [];
+      savedVideos.textContent = "";
+
+      videos.slice(-3).reverse().forEach(item => {
+        const url = URL.createObjectURL(item.blob);
+        previewUrls.push(url);
+
+        const label = document.createElement("p");
+        label.textContent =
+          new Date(item.createdAt).toLocaleString("ja-JP");
+
+        const player = document.createElement("video");
+        player.src = url;
+        player.controls = true;
+        player.playsInline = true;
+
+        savedVideos.append(label, player);
+      });
+
+    } catch (error) {
+      log("一覧取得エラー：" + errorText(error));
     }
-
-    // 動画一覧
-    async function showLibrary() {
-      startScreen.style.display = "none";
-      libraryScreen.style.display = "block";
-      videoList.textContent = "読み込み中…";
-
-      libraryUrls.forEach(url => URL.revokeObjectURL(url));
-      libraryUrls = [];
-
-      try {
-        const videos = await getSavedVideos();
-        videos.reverse();
-
-        videoList.textContent = "";
-
-        if (videos.length === 0) {
-          videoList.textContent = "保存した動画はありません。";
-          return;
-        }
-
-        for (const item of videos) {
-          const container = document.createElement("div");
-          container.className = "videoItem";
-
-          const date = document.createElement("div");
-          date.textContent = new Date(item.createdAt).toLocaleString("ja-JP");
-
-          const url = URL.createObjectURL(item.blob);
-          libraryUrls.push(url);
-
-          const player = document.createElement("video");
-          player.src = url;
-          player.controls = true;
-          player.playsInline = true;
-          player.preload = "metadata";
-
-          const download = document.createElement("button");
-          download.textContent = "iPhoneに保存";
-
-          download.onclick = () => {
-            const link = document.createElement("a");
-            link.href = url;
-
-            const extension =
-              item.blob.type.includes("mp4") ? "mp4" : "webm";
-
-            link.download = "BlackCamera-" + item.id + "." + extension;
-            link.click();
-          };
-
-          container.appendChild(date);
-          container.appendChild(player);
-          container.appendChild(download);
-          videoList.appendChild(container);
-        }
-
-      } catch (error) {
-        videoList.textContent = "動画一覧を読み込めませんでした。";
-      }
-    }
-
-    libraryButton.addEventListener("click", showLibrary);
-
-    backButton.addEventListener("click", () => {
-      libraryUrls.forEach(url => URL.revokeObjectURL(url));
-      libraryUrls = [];
-
-      videoList.textContent = "";
-      libraryScreen.style.display = "none";
-      startScreen.style.display = "flex";
-    });
-  </script>
-
+  };
+</script>
 </body>
 </html>
