@@ -2,11 +2,13 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
+
   <meta
     name="viewport"
     content="width=device-width, initial-scale=1.0,
              viewport-fit=cover, user-scalable=no"
   >
+
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="theme-color" content="#000000">
@@ -55,12 +57,15 @@
       position: fixed;
       inset: 0;
       z-index: 20;
+
       display: none;
       overflow-y: auto;
+
       padding:
         calc(20px + env(safe-area-inset-top))
         20px
         calc(30px + env(safe-area-inset-bottom));
+
       background: #111;
     }
 
@@ -68,14 +73,17 @@
       padding: 12px 20px;
       border: 0;
       border-radius: 10px;
+
       background: #fff;
       color: #000;
+
       font-size: 16px;
     }
 
     .videoItem {
       margin: 18px 0;
       padding: 15px;
+
       background: #252525;
       border-radius: 12px;
     }
@@ -92,11 +100,24 @@
       border-radius: 8px;
     }
 
+    .saveButton,
     .deleteButton {
+      width: 100%;
       margin-top: 12px;
-      padding: 11px 16px;
+      padding: 12px 16px;
+
       border: 0;
       border-radius: 9px;
+
+      font-size: 16px;
+    }
+
+    .saveButton {
+      background: #fff;
+      color: #000;
+    }
+
+    .deleteButton {
       background: #444;
       color: #fff;
     }
@@ -209,7 +230,6 @@
       request.onsuccess = () => {
 
         database = request.result;
-
         resolve(database);
 
       };
@@ -351,8 +371,8 @@
 
 
     /*
-      ここではカメラを止めない。
-      最終データを受け取ってから止める。
+      ここではカメラを停止しない。
+      最後の動画データを受け取ってから停止する。
     */
 
     recorder.stop();
@@ -361,7 +381,7 @@
 
 
   // =========================
-  // 自動保存
+  // 録画を自動保存
   // =========================
 
   async function saveRecording() {
@@ -382,7 +402,7 @@
 
 
     /*
-      最終データ取得後に
+      最後のデータ取得後に
       カメラ・マイクを停止
     */
 
@@ -479,7 +499,7 @@
 
 
   // =========================
-  // 3秒長押し判定
+  // 3秒長押し
   // =========================
 
   blackScreen.addEventListener(
@@ -530,7 +550,7 @@
 
 
   // =========================
-  // ダブルタップ判定
+  // ダブルタップ
   // =========================
 
   blackScreen.addEventListener(
@@ -542,11 +562,6 @@
       clearTimeout(longPressTimer);
 
 
-      /*
-        3秒長押し後の指離しを
-        タップとして数えない
-      */
-
       if (longPressActivated) {
 
         longPressActivated = false;
@@ -557,7 +572,9 @@
       }
 
 
-      const now = Date.now();
+      const now =
+        Date.now();
+
 
       const interval =
         now - lastTapTime;
@@ -597,7 +614,7 @@
 
 
   // =========================
-  // 保存済み動画取得
+  // 保存動画取得
   // =========================
 
   async function getSavedVideos() {
@@ -672,7 +689,113 @@
 
 
   // =========================
-  // 保存動画一覧を開く
+  // iPhoneへ書き出す
+  // =========================
+
+  async function exportVideo(item) {
+
+    const date =
+      new Date(item.createdAt);
+
+
+    const fileName =
+      "BlackCamera_" +
+      date.getFullYear() +
+      String(date.getMonth() + 1).padStart(2, "0") +
+      String(date.getDate()).padStart(2, "0") +
+      "_" +
+      String(date.getHours()).padStart(2, "0") +
+      String(date.getMinutes()).padStart(2, "0") +
+      String(date.getSeconds()).padStart(2, "0") +
+      ".mp4";
+
+
+    const file =
+      new File(
+        [item.blob],
+        fileName,
+        {
+          type:
+            item.blob.type ||
+            "video/mp4"
+        }
+      );
+
+
+    /*
+      iPhoneで共有シートが使える場合は
+      共有画面を開く
+    */
+
+    try {
+
+      if (
+        navigator.share &&
+        navigator.canShare &&
+        navigator.canShare({
+          files: [file]
+        })
+      ) {
+
+        await navigator.share({
+          files: [file],
+          title: fileName
+        });
+
+        return;
+
+      }
+
+    } catch (error) {
+
+      /*
+        ユーザーが共有画面を閉じただけの場合もあるので
+        ここではエラー表示しない
+      */
+
+      if (
+        error.name === "AbortError"
+      ) {
+        return;
+      }
+
+    }
+
+
+    /*
+      共有機能が使えない場合は
+      通常のダウンロードに切り替える
+    */
+
+    const url =
+      URL.createObjectURL(item.blob);
+
+
+    const link =
+      document.createElement("a");
+
+
+    link.href = url;
+    link.download = fileName;
+
+
+    document.body.appendChild(link);
+
+    link.click();
+
+    link.remove();
+
+
+    setTimeout(
+      () => URL.revokeObjectURL(url),
+      1000
+    );
+
+  }
+
+
+  // =========================
+  // 保存動画一覧
   // =========================
 
   async function showLibrary() {
@@ -742,6 +865,7 @@
         date.className =
           "videoDate";
 
+
         date.textContent =
           new Date(
             item.createdAt
@@ -762,6 +886,32 @@
         player.playsInline = true;
         player.preload = "metadata";
 
+
+        /*
+          iPhoneに保存ボタン
+        */
+
+        const saveButton =
+          document.createElement("button");
+
+        saveButton.className =
+          "saveButton";
+
+        saveButton.textContent =
+          "iPhoneに保存";
+
+
+        saveButton.onclick =
+          async () => {
+
+            await exportVideo(item);
+
+          };
+
+
+        /*
+          削除ボタン
+        */
 
         const deleteButton =
           document.createElement("button");
@@ -795,7 +945,11 @@
 
 
         container.appendChild(date);
+
         container.appendChild(player);
+
+        container.appendChild(saveButton);
+
         container.appendChild(deleteButton);
 
         videoList.appendChild(container);
@@ -816,7 +970,7 @@
 
 
   // =========================
-  // 動画一覧から黒画面へ戻る
+  // 黒画面へ戻る
   // =========================
 
   backButton.addEventListener(
