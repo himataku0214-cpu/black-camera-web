@@ -5,38 +5,458 @@
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    content="width=device-width,
+             initial-scale=1.0,
+             viewport-fit=cover,
+             user-scalable=no"
   >
 
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="theme-color" content="#ffffff">
+  <title>Black Camera</title>
 
-  <title>Google表示テスト</title>
+  <!-- ホーム画面からアプリ風に起動 -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+
+  <!-- iPhone上端の背景を黒系にする -->
+  <meta
+    name="apple-mobile-web-app-status-bar-style"
+    content="black"
+  >
+
+  <!-- ブラウザ側のテーマ色 -->
+  <meta name="theme-color" content="#000000">
 
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
+
       width: 100%;
       height: 100%;
+      min-height: 100dvh;
+
+      background: #000;
       overflow: hidden;
-      background: white;
+
+      touch-action: manipulation;
+
+      -webkit-user-select: none;
+      user-select: none;
+
+      -webkit-touch-callout: none;
     }
 
-    iframe {
-      width: 100%;
-      height: 100%;
-      border: 0;
+    body {
+      position: fixed;
+      inset: 0;
+
+      /* iPhoneのノッチ周辺まで黒背景 */
+      padding-top: env(safe-area-inset-top);
+      padding-right: env(safe-area-inset-right);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+
+      box-sizing: border-box;
+    }
+
+    /*
+      カメラ映像は録画に使うが
+      ユーザー画面には表示しない
+    */
+    #camera {
+      position: fixed;
+
+      width: 1px;
+      height: 1px;
+
+      opacity: 0;
+
+      pointer-events: none;
+    }
+
+    #startScreen {
+      position: fixed;
+      inset: 0;
+
+      background: #000;
+
+      display: flex;
+
+      align-items: center;
+      justify-content: center;
+    }
+
+    #startButton {
+      font-size: 18px;
+
+      padding: 15px 24px;
+
+      border: none;
+      border-radius: 12px;
+
+      background: #fff;
+      color: #000;
+    }
+
+    /*
+      カメラ準備後の黒画面
+    */
+    #blackScreen {
+      position: fixed;
+
+      top: 0;
+      right: 0;
+      bottom: 0;
+      left: 0;
+
+      width: 100vw;
+      height: 100dvh;
+
+      background: #000;
+
+      display: none;
+
+      z-index: 9999;
     }
   </style>
 </head>
 
 <body>
 
-  <iframe
-    src="https://www.google.com/"
-    title="Google">
-  </iframe>
+  <video
+    id="camera"
+    autoplay
+    playsinline
+    muted>
+  </video>
+
+  <div id="startScreen">
+
+    <button id="startButton">
+      カメラを起動
+    </button>
+
+  </div>
+
+  <div id="blackScreen"></div>
+
+
+  <script>
+
+    const video =
+      document.getElementById("camera");
+
+    const startScreen =
+      document.getElementById("startScreen");
+
+    const startButton =
+      document.getElementById("startButton");
+
+    const blackScreen =
+      document.getElementById("blackScreen");
+
+
+    let stream = null;
+
+    let recorder = null;
+
+    let chunks = [];
+
+    let isRecording = false;
+
+    let lastTapTime = 0;
+
+
+    // =========================
+    // カメラ・マイク準備
+    // =========================
+
+    startButton.addEventListener(
+      "click",
+      async () => {
+
+        try {
+
+          stream =
+            await navigator.mediaDevices
+              .getUserMedia({
+
+                video: {
+
+                  facingMode: {
+                    ideal: "environment"
+                  }
+
+                },
+
+                audio: true
+
+              });
+
+
+          video.srcObject = stream;
+
+          await video.play();
+
+
+          startScreen.style.display =
+            "none";
+
+          blackScreen.style.display =
+            "block";
+
+
+        } catch (error) {
+
+          alert(
+            "カメラまたはマイクを起動できませんでした。\n" +
+            error.message
+          );
+
+        }
+
+      }
+    );
+
+
+    // =========================
+    // 録画開始
+    // =========================
+
+    function startRecording() {
+
+      if (
+        !stream ||
+        isRecording
+      ) {
+
+        return;
+
+      }
+
+
+      chunks = [];
+
+
+      try {
+
+        recorder =
+          new MediaRecorder(stream);
+
+      } catch (error) {
+
+        alert(
+          "録画を開始できませんでした。\n" +
+          error.message
+        );
+
+        return;
+
+      }
+
+
+      recorder.ondataavailable =
+        event => {
+
+          if (
+            event.data.size > 0
+          ) {
+
+            chunks.push(
+              event.data
+            );
+
+          }
+
+        };
+
+
+      recorder.onstop =
+        () => {
+
+          saveVideo();
+
+        };
+
+
+      recorder.start();
+
+      isRecording = true;
+
+    }
+
+
+    // =========================
+    // 録画停止
+    // =========================
+
+    function stopRecording() {
+
+      if (
+        !recorder ||
+        !isRecording ||
+        recorder.state === "inactive"
+      ) {
+
+        return;
+
+      }
+
+
+      isRecording = false;
+
+      recorder.stop();
+
+
+      // カメラとマイクを完全停止
+      if (stream) {
+
+        stream
+          .getTracks()
+          .forEach(
+            track => {
+
+              track.stop();
+
+            }
+          );
+
+        stream = null;
+
+      }
+
+
+      video.srcObject = null;
+
+    }
+
+
+    // =========================
+    // 動画保存
+    // =========================
+
+    function saveVideo() {
+
+      if (
+        chunks.length === 0
+      ) {
+
+        return;
+
+      }
+
+
+      const mimeType =
+        recorder.mimeType ||
+        chunks[0].type ||
+        "video/mp4";
+
+
+      const blob =
+        new Blob(
+          chunks,
+          {
+            type: mimeType
+          }
+        );
+
+
+      const url =
+        URL.createObjectURL(blob);
+
+
+      const link =
+        document.createElement("a");
+
+
+      link.href = url;
+
+      link.download =
+        "BlackCamera-video";
+
+
+      document.body.appendChild(
+        link
+      );
+
+      link.click();
+
+      link.remove();
+
+
+      setTimeout(
+        () => {
+
+          URL.revokeObjectURL(
+            url
+          );
+
+        },
+        5000
+      );
+
+
+      blackScreen.style.display =
+        "none";
+
+      startScreen.style.display =
+        "flex";
+
+    }
+
+
+    // =========================
+    // ダブルタップ
+    // =========================
+
+    blackScreen.addEventListener(
+      "touchend",
+      event => {
+
+        event.preventDefault();
+
+
+        const now =
+          Date.now();
+
+
+        const interval =
+          now - lastTapTime;
+
+
+        if (
+          interval > 0 &&
+          interval < 350
+        ) {
+
+          lastTapTime = 0;
+
+
+          if (isRecording) {
+
+            stopRecording();
+
+          } else {
+
+            startRecording();
+
+          }
+
+
+          return;
+
+        }
+
+
+        lastTapTime = now;
+
+      },
+      {
+        passive: false
+      }
+    );
+
+  </script>
 
 </body>
 </html>
